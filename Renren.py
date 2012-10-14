@@ -9,7 +9,7 @@ from re import match
 from urllib import urlencode
 import os, re, json, sys
 import threading, time
-import urllib,urllib2
+import urllib, urllib2, socket
 import shelve
 from pprint import pprint 
 import logging, logging.handlers 
@@ -26,6 +26,9 @@ def get_logger(handler = logging.StreamHandler()):
 logger = get_logger() 
 GlobalShelveMutex = threading.Lock() 
 TaskListFilename = "TaskList.bin"
+
+# 避免urllib2永远不返回
+socket.setdefaulttimeout(30)
 
     
 # 字符串形式的unicode转成真正的字符
@@ -134,8 +137,21 @@ class RenrenRequester:
                 request = urllib2.Request(url, encodeData)
             else:
                 request = urllib2.Request(url)
-            result = self.opener.open(request)
-            return result
+
+            count = 0
+            while True:
+                try:
+                    count += 1
+                    if count > 5:
+                        break
+                    result = self.opener.open(request)
+                    url = result.geturl()
+                    rawHtml = result.read()
+                    break
+                except socket.timeout:
+                    logger.error("Request Timeout", exc_info=True)
+                    continue
+            return rawHtml, url
         else:
             return None
         
@@ -185,7 +201,7 @@ class RenrenFriendList:
     '''
     def Handler(self, requester, param):     
         friendUrl = 'http://friend.renren.com/myfriendlistx.do'
-        rawHtml = requester.Request(friendUrl).read()   
+        rawHtml, url = requester.Request(friendUrl)
          
         friendInfoPack = re.search(r'var friends=\[(.*?)\];', rawHtml).group(1)        
         friendIdPattern = re.compile(r'"id":(\d+).*?"name":"(.*?)"')
@@ -274,8 +290,8 @@ class RenrenAlbumDownloader2012:
 
     def __GetImgUrlsInAlbum(self, album_url):
         album_url += "/bypage/ajax?curPage=0&pagenum=100" # pick 100 pages which has 20 per page
-        result = self.requester.Request(album_url)            
-        rawHtml = unicode(result.read(), "utf-8")
+        rawHtml, url = self.requester.Request(album_url)            
+        rawHtml = unicode(rawHtml, "utf-8")
 
         data = json.loads(rawHtml)
         photoList = data['photoList']
@@ -308,8 +324,8 @@ class RenrenAlbumDownloader2012:
         albumsUrl = "http://photo.renren.com/photo/%s/album/relatives" % userid
 
         # 打开相册首页，以获取每个相册的地址以及名字
-        result = self.requester.Request(albumsUrl)            
-        rawHtml = unicode(result.read(), "utf-8")
+        rawHtml, url = self.requester.Request(albumsUrl)            
+        rawHtml = unicode(rawHtml, "utf-8")
 
         # 取得人名
         peopleName = self.__GetPeopleNameFromHtml(rawHtml).strip()
@@ -383,7 +399,7 @@ class AllFriendAlbumsDownloader:
     class DownloaderThread(threading.Thread):
         def __init__(self, taskList):
             threading.Thread.__init__(self)
-            self.tastList = taskList
+            self.taskList = taskList
 
         def run(self):
             while len(self.taskList) > 0:
@@ -409,15 +425,17 @@ class AllFriendAlbumsDownloader:
 
     def Handler(self, requester, path, threadnum=20):
         self.requester = requester
-    
-        friendsList = RenrenFriendList().Handler(self.requester, None)
-
         db = shelve.open(TaskListFilename, writeback = True)
         
         if not db.has_key("TaskList"):
             db["TaskList"] = []
 
-        if len(db["TaskList"]) == 0:
+        logger.info("Task list length: %d" % len(db["TaskList"]))
+
+        if len(db["TaskList"]) == 0: 
+            friendsList = RenrenFriendList().Handler(self.requester, None)
+            logger.info("Friend List length: %d" % len(friendsList))
+
             logger.info("Start creating the task list.")
             totalTaskList = []
             for userid, name in friendsList:
@@ -428,7 +446,7 @@ class AllFriendAlbumsDownloader:
             db["TaskList"] = totalTaskList
 
         threads = []
-        for i in xrange(self.threadnum):
+        for i in xrange(threadnum):
             downloader = self.DownloaderThread(db["TaskList"])
             downloader.start()
             threads.append(downloader)
