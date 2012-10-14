@@ -148,7 +148,7 @@ class RenrenRequester:
                     url = result.geturl()
                     rawHtml = result.read()
                     break
-                except socket.timeout:
+                except (socket.timeout, urllib2.URLError):
                     logger.error("Request Timeout", exc_info=True)
                     continue
             return rawHtml, url
@@ -308,7 +308,7 @@ class RenrenAlbumDownloader2012:
 
     def __NormFilename(self, filename):
         filename = re.sub(ur"[\t\r\n\\/:：*?<>|]", "", filename)
-        filename = filename.strip(".")
+        filename = filename.strip(". \n\r")
         return filename
 
     def __DownloadOneAlbum(self, userid, path):
@@ -503,6 +503,6 @@ class SuperRenren:
         downloader.Handler()
 
     # 自动下载所有好友相册
-    def DownloadAllFriendsAlbums(self, path = 'albums', threadnumber = 20):
+    def DownloadAllFriendsAlbums(self, path = 'albums', threadnumber = 50):
         downloader = AllFriendAlbumsDownloader()
         downloader.Handler(self.requester, path, threadnumber)
