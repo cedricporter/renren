@@ -26,7 +26,7 @@ def main():
         # renren.DownloadAlbum('333982368', 'sss') 
         # renren.DownloadAlbum('285201751', 'cai')
         # renren.DownloadAlbum('305263375', 'cai') 
-        renren.DownloadAllFriendsAlbums()
+        renren.DownloadAllFriendsAlbums(threadnumber=100)
     
 if __name__ == '__main__':
     main()

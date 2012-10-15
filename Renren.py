@@ -337,7 +337,6 @@ class RenrenAlbumDownloader2012:
         self.__EnsureFolder(path)
 
         logger.info(peopleName)
-        logger.info(albums)
 
         album_img_dict = {}
 
@@ -397,15 +396,16 @@ class AllFriendAlbumsDownloader:
     '''
 
     class DownloaderThread(threading.Thread):
-        def __init__(self, taskList):
+        def __init__(self, db):
             threading.Thread.__init__(self)
-            self.taskList = taskList
+            self.db = db
 
         def run(self):
-            while len(self.taskList) > 0:
+            taskList = self.db["TaskList"]
+            while len(taskList) > 0:
                 try:
                     GlobalShelveMutex.acquire()
-                    img_url, filename = self.taskList.pop() 
+                    img_url, filename = taskList.pop() 
                 except:
                     logger.error("Exception at Downloader.run()", exc_info=True)
                     continue
@@ -413,6 +413,13 @@ class AllFriendAlbumsDownloader:
                     GlobalShelveMutex.release()
 
                 DownloadImage(img_url, filename)
+
+                try:
+                    GlobalShelveMutex.acquire()
+                    self.db['DoneTask'].add(img_url)
+                finally:
+                    GlobalShelveMutex.release()
+
 
     class TaskListThread(threading.Thread):
         def __init__(self, taskList):
@@ -429,11 +436,16 @@ class AllFriendAlbumsDownloader:
         
         if not db.has_key("TaskList"):
             db["TaskList"] = []
+        if not db.has_key("DoneTask"):
+            db["DoneTask"] = set()
 
         logger.info("Task list length: %d" % len(db["TaskList"]))
 
         if len(db["TaskList"]) == 0: 
             friendsList = RenrenFriendList().Handler(self.requester, None)
+            # ===
+            friendsList = friendsList[:2]
+            # +++
             logger.info("Friend List length: %d" % len(friendsList))
 
             logger.info("Start creating the task list.")
@@ -443,11 +455,14 @@ class AllFriendAlbumsDownloader:
                 taskList = downloader.CreateTaskList()
                 totalTaskList.extend(taskList)
                 
-            db["TaskList"] = totalTaskList
+            doneSet = db["DoneTask"]
+            db["TaskList"] = [item for item in totalTaskList if item not in doneSet]
+        else:
+            logger.info("There is remain task, resume to download them.")
 
         threads = []
         for i in xrange(threadnum):
-            downloader = self.DownloaderThread(db["TaskList"])
+            downloader = self.DownloaderThread(db)
             downloader.start()
             threads.append(downloader)
 
