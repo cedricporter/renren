@@ -455,7 +455,7 @@ class AllFriendAlbumsDownloader:
                 totalTaskList.extend(taskList)
                 
             doneSet = db["DoneTask"]
-            db["TaskList"] = [item for item in totalTaskList if item not in doneSet]
+            db["TaskList"] = [item for item in totalTaskList if item[0] not in doneSet]
         else:
             logger.info("There is remain task, resume to download them.")
 
