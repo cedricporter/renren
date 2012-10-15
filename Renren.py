@@ -443,9 +443,6 @@ class AllFriendAlbumsDownloader:
 
         if len(db["TaskList"]) == 0: 
             friendsList = RenrenFriendList().Handler(self.requester, None)
-            # ===
-            friendsList = friendsList[:2]
-            # +++
             logger.info("Friend List length: %d" % len(friendsList))
 
             logger.info("Start creating the task list.")
