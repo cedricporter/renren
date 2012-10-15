@@ -293,14 +293,16 @@ class RenrenAlbumDownloader2012:
         rawHtml, url = self.requester.Request(album_url)            
         rawHtml = unicode(rawHtml, "utf-8")
 
-        data = json.loads(rawHtml)
-        photoList = data['photoList']
-
         img_urls = []
-        for item in photoList:
-            img_urls.append((item['title'], item['largeUrl'])) 
-
-        return img_urls
+        try:
+            data = json.loads(rawHtml)
+            photoList = data['photoList'] 
+            for item in photoList:
+                img_urls.append((item['title'], item['largeUrl'])) 
+        except ValueError:
+            logger.error("Json Error", exc_info=True)
+        finally:
+            return img_urls
 
     def __EnsureFolder(self, path):
         if os.path.exists(path) == False:
